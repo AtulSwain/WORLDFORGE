@@ -1,0 +1,156 @@
+@import "tailwindcss";
+
+/* ───────────── WorldForge design tokens ─────────────
+   A restrained dark-luxury palette: gold is reserved for primary actions,
+   active selections and key highlights. */
+@theme {
+  --color-bg: #101116;
+  --color-bg-2: #15161c;
+  --color-surface: #1c1d24;
+  --color-surface-2: #23242c;
+  --color-surface-3: #2a2b34;
+  --color-border: #30313a;
+  --color-border-strong: #3d3e49;
+  --color-text: #f1eee7;
+  --color-text-2: #a4a5af;
+  --color-muted: #737581;
+  --color-gold: #d6bd8d;
+  --color-gold-strong: #e4cfa6;
+  --color-gold-dim: #8f7e5c;
+  --color-violet: #8d80b8;
+  --color-success: #7fa77a;
+  --color-warning: #c9a45c;
+  --color-danger: #c46a6a;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-cormorant), ui-serif, Georgia, serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  --shadow-panel: 0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 12px 32px -12px rgb(0 0 0 / 0.6);
+  --shadow-pop: 0 18px 50px -12px rgb(0 0 0 / 0.75);
+
+  --animate-fade-in: fade-in 180ms ease-out both;
+  --animate-drift: drift 60s ease-in-out infinite alternate;
+  --animate-mist: mist 28s ease-in-out infinite alternate;
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes drift {
+    from { transform: translate3d(-1.5%, 0, 0) scale(1.04); }
+    to { transform: translate3d(1.5%, -1%, 0) scale(1.06); }
+  }
+  @keyframes mist {
+    from { transform: translate3d(-6%, 0, 0); opacity: 0.55; }
+    to { transform: translate3d(6%, -2%, 0); opacity: 0.8; }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: rgb(214 189 141 / 0.3);
+    color: var(--color-text);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+  input[type="number"]::-webkit-inner-spin-button {
+    opacity: 0.4;
+  }
+}
+
+@layer components {
+  .wf-panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-panel);
+  }
+  .wf-eyebrow {
+    font-size: 0.6875rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+    font-weight: 500;
+  }
+  .wf-grain {
+    background-image: radial-gradient(rgb(255 255 255 / 0.025) 1px, transparent 1px);
+    background-size: 3px 3px;
+  }
+  .wf-prose {
+    color: var(--color-text-2);
+    line-height: 1.7;
+    font-size: 0.95rem;
+  }
+  .wf-prose h1, .wf-prose h2, .wf-prose h3 {
+    color: var(--color-text);
+    font-family: var(--font-serif);
+    font-weight: 600;
+    line-height: 1.2;
+    margin: 1.4em 0 0.5em;
+  }
+  .wf-prose h1 { font-size: 2rem; margin-top: 0; }
+  .wf-prose h2 { font-size: 1.5rem; }
+  .wf-prose h3 { font-size: 1.2rem; }
+  .wf-prose p, .wf-prose ul, .wf-prose ol, .wf-prose blockquote, .wf-prose table { margin: 0.8em 0; }
+  .wf-prose ul { list-style: disc; padding-left: 1.4em; }
+  .wf-prose ol { list-style: decimal; padding-left: 1.4em; }
+  .wf-prose strong { color: var(--color-text); font-weight: 600; }
+  .wf-prose a { color: var(--color-gold); text-decoration: underline; text-underline-offset: 3px; }
+  .wf-prose blockquote { border-left: 2px solid var(--color-gold-dim); padding-left: 1em; font-style: italic; }
+  .wf-prose code { font-family: var(--font-mono); font-size: 0.85em; background: var(--color-surface-2); padding: 0.1em 0.35em; border-radius: 4px; }
+  .wf-prose table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+  .wf-prose th, .wf-prose td { border: 1px solid var(--color-border); padding: 0.4em 0.6em; text-align: left; }
+  .wf-prose hr { border-color: var(--color-border); margin: 2em 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* React Flow theming */
+.react-flow {
+  --xy-background-color: transparent;
+  --xy-edge-stroke: #4a4b57;
+  --xy-edge-stroke-selected: var(--color-gold);
+  --xy-minimap-background-color: var(--color-bg-2);
+  --xy-controls-button-background-color: var(--color-surface);
+  --xy-controls-button-background-color-hover: var(--color-surface-2);
+  --xy-controls-button-color: var(--color-text-2);
+  --xy-controls-button-border-color: var(--color-border);
+  --xy-attribution-background-color: transparent;
+}
+.react-flow__controls { box-shadow: none !important; border: 1px solid var(--color-border); border-radius: 6px; overflow: hidden; }
+.react-flow__edge-textbg { fill: var(--color-bg); }
+.react-flow__edge-text { fill: var(--color-text-2); font-size: 10px; }
