@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Dialog as D } from "radix-ui";
 import {
-  Search, UserPlus, Shield, MapPin, Diamond, Clock3, Network, BookOpen, Settings, Globe, Flame, GitBranch, LayoutDashboard, FileText, Gem, Plus,
+  Search, UserPlus, Shield, MapPin, Diamond, Clock3, Network, BookOpen, Settings, Globe, Flame, GitBranch, LayoutDashboard, FileText, Gem, Plus, type LucideIcon,
 } from "lucide-react";
 import { Kbd } from "@/components/ui/misc";
 
@@ -77,7 +77,7 @@ export function CommandPalette({ worldId, canWrite, universes }: { worldId: stri
   );
 
   const w = worldId ? (p: string) => `/worlds/${worldId}${p}` : null;
-  const commands: { label: string; icon: React.ElementType; href: string; group: string; write?: boolean }[] = w
+  const commands: { label: string; icon: LucideIcon; href: string; group: string; write?: boolean }[] = w
     ? [
         { group: "Create", label: "Create character", icon: UserPlus, href: w("/characters/new"), write: true },
         { group: "Create", label: "Create faction", icon: Shield, href: w("/factions/new"), write: true },
