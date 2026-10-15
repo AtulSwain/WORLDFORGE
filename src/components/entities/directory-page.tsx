@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge, CanonBadge } from "@/components/ui/badge";
 import { EmptyState, PageHeader, Avatar } from "@/components/ui/misc";
 import { EntityIcon } from "@/components/world/entity-visual";
+import { getPreferences } from "@/server/services/users";
 import { DirectoryToolbar, type FilterDef } from "./directory-toolbar";
 import { humanize } from "@/domain/catalog";
 import { plural } from "@/lib/utils";
@@ -26,7 +27,9 @@ export async function DirectoryPage({ worldId, type, searchParams, route }: { wo
   const typeParam = str(searchParams.type) as EntityTypeKey | undefined;
   const effectiveType: EntityTypeKey | EntityTypeKey[] = type ?? (typeParam && ENTITY_TYPES.includes(typeParam) ? typeParam : (ENTITY_TYPES.filter((t) => ENTITY_TYPE_META[t].route === "entities") as EntityTypeKey[]));
   const page = Math.max(1, Number(str(searchParams.page) ?? 1) || 1);
-  const view = str(searchParams.view) === "list" ? "list" : "grid";
+  const prefs = await getPreferences(ctx.user.id);
+  const requestedView = str(searchParams.view);
+  const view: "grid" | "list" = requestedView === "list" || requestedView === "grid" ? requestedView : prefs.directoryView === "list" ? "list" : "grid";
   const faction = str(searchParams.faction);
   const location = str(searchParams.location);
   const isCharacters = type === "CHARACTER";
@@ -95,7 +98,7 @@ export async function DirectoryPage({ worldId, type, searchParams, route }: { wo
         }
       />
       <div className="mt-6">
-        <DirectoryToolbar filters={filters} sorts={[{ value: "name", label: "Name A–Z" }, { value: "updated", label: "Recently edited" }, { value: "created", label: "Newest" }]} />
+        <DirectoryToolbar defaultView={prefs.directoryView === "list" ? "list" : "grid"} filters={filters} sorts={[{ value: "name", label: "Name A–Z" }, { value: "updated", label: "Recently edited" }, { value: "created", label: "Newest" }]} />
       </div>
       <p className="mt-3 text-xs text-muted" aria-live="polite">{result.total} {result.total === 1 ? meta.label.toLowerCase() : meta.plural.toLowerCase()}</p>
 

@@ -4,6 +4,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, PageHeader } from "@/components/ui/misc";
+import { ImportUniverseButton } from "@/components/dashboard/import-universe-button";
 import { AddSampleButton } from "@/components/dashboard/add-sample-button";
 import { requireUser } from "@/server/auth/session";
 import { listUniverses } from "@/server/services/universes";
@@ -39,6 +40,7 @@ export default async function DashboardPage(props: PageProps<"/dashboard">) {
               <Button asChild variant="ghost" size="sm">
                 <Link href={showArchived ? "/dashboard" : "/dashboard?archived=1"}><Archive /> {showArchived ? "Active worlds" : "Archived"}</Link>
               </Button>
+              <ImportUniverseButton />
               <Button asChild variant="primary">
                 <Link href="/worlds/new"><Plus /> New universe</Link>
               </Button>

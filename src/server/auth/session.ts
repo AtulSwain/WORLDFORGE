@@ -68,3 +68,10 @@ export async function clientIp(): Promise<string> {
   const h = await headers();
   return h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "local";
 }
+
+/** Revokes every session of a user except the one making this request. Returns how many were revoked. */
+export async function revokeOtherSessions(userId: string): Promise<number> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const r = await db.session.deleteMany({ where: { userId, ...(token ? { NOT: { tokenHash: sha256(token) } } : {}) } });
+  return r.count;
+}

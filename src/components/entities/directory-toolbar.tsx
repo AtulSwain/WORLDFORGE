@@ -14,7 +14,7 @@ export interface FilterDef {
 }
 
 /** URL-driven search, filters, sort and view controls (shareable, back-button friendly). */
-export function DirectoryToolbar({ filters, sorts }: { filters: FilterDef[]; sorts: { value: string; label: string }[] }) {
+export function DirectoryToolbar({ filters, sorts, defaultView = "grid" }: { filters: FilterDef[]; sorts: { value: string; label: string }[]; defaultView?: "grid" | "list" }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -39,7 +39,7 @@ export function DirectoryToolbar({ filters, sorts }: { filters: FilterDef[]; sor
     // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce on query text only
   }, [q]);
 
-  const view = params.get("view") ?? "grid";
+  const view = params.get("view") ?? defaultView;
   const archived = params.get("archived") === "1";
   const active = filters.some((f) => params.get(f.key)) || !!params.get("q");
 
