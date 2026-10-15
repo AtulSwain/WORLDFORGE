@@ -43,17 +43,23 @@ export const CONSISTENCY_RULES = [
 export type ConsistencyRule = (typeof CONSISTENCY_RULES)[number];
 
 export const universeSettingsSchema = z.object({
-  rules: z
-    .record(z.enum(CONSISTENCY_RULES), z.boolean())
-    .default({} as Record<ConsistencyRule, boolean>),
+  /** Rules missing from the map are enabled. */
+  rules: z.partialRecord(z.enum(CONSISTENCY_RULES), z.boolean()).default({}),
   /** Minimum days a character needs between two distinct locations (travel constraint). */
   minTravelDays: z.number().int().min(0).max(3650).default(0),
   aiEnabled: z.boolean().default(true),
 });
+
+/** Lenient variant for reading stored settings: an invalid field falls back to its default alone. */
+const storedSettingsSchema = z.object({
+  rules: universeSettingsSchema.shape.rules.catch({}),
+  minTravelDays: universeSettingsSchema.shape.minTravelDays.catch(0),
+  aiEnabled: universeSettingsSchema.shape.aiEnabled.catch(true),
+});
 export type UniverseSettings = z.infer<typeof universeSettingsSchema>;
 
 export function parseSettings(raw: unknown): UniverseSettings {
-  const r = universeSettingsSchema.safeParse(raw ?? {});
+  const r = storedSettingsSchema.safeParse(raw && typeof raw === "object" ? raw : {});
   return r.success ? r.data : universeSettingsSchema.parse({});
 }
 

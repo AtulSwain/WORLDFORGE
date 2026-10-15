@@ -52,7 +52,7 @@ export function AiAssistPanel({
     return (
       <div className="wf-panel p-4">
         <h2 className="flex items-center gap-2 text-sm font-medium"><Sparkles className="size-4 text-violet" /> AI assistance</h2>
-        <p className="mt-2 text-xs text-text-2">AI is not configured on this server, so these tools are unavailable. Everything else — including deterministic consistency checks — works without it. Administrators can set <code className="text-text">AI_PROVIDER</code> and <code className="text-text">AI_API_KEY</code>.</p>
+        <p className="mt-2 text-xs text-text-2">AI is not configured on this server, so these tools are unavailable. Everything else — including deterministic consistency checks — works without it. Administrators can set <code className="text-text">AI_PROVIDER</code>, <code className="text-text">AI_MODEL</code> and <code className="text-text">AI_API_KEY</code>.</p>
       </div>
     );
   }
