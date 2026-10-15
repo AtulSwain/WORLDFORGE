@@ -9,6 +9,7 @@ import { db, type DbOrTx } from "../db";
 import { conflict, invalid, notFound } from "../errors";
 import { assertEntitiesInUniverse, requireAccess } from "./access";
 import { recordActivity } from "./activity";
+import { touchTimeline } from "./changes";
 import { createRevision, eventSnapshot } from "./revisions";
 import { mainTimeline, resolveTimelineId, timelineChain } from "./snapshot";
 
@@ -54,6 +55,7 @@ export async function createEvent(userId: string, universeId: string, raw: Event
         },
       },
     });
+    await touchTimeline(tx, timelineId);
     await createRevision(tx, {
       universeId, recordType: "EVENT", recordId: ev.id, version: 1, snapshot: { ...eventSnapshot(ev), participants: input.participants },
       summary: "Created", authorId: userId, timelineId,
@@ -91,6 +93,7 @@ export async function updateEvent(userId: string, universeId: string, eventId: s
       data: dedupeParticipants(input.participants).map((p) => ({ eventId, entityId: p.entityId, role: p.role as ParticipantRole, note: p.note ?? null })),
     });
     const updated = await tx.historicalEvent.findUniqueOrThrow({ where: { id: eventId } });
+    await touchTimeline(tx, updated.timelineId);
     await createRevision(tx, {
       universeId, recordType: "EVENT", recordId: eventId, version: updated.version,
       snapshot: { ...eventSnapshot(updated), participants: input.participants }, summary: "Edited", authorId: userId, timelineId: updated.timelineId,
@@ -106,6 +109,7 @@ export async function setEventArchived(userId: string, universeId: string, event
     const ev = await tx.historicalEvent.findFirst({ where: { id: eventId, universeId } });
     if (!ev) throw notFound("Event");
     const updated = await tx.historicalEvent.update({ where: { id: eventId }, data: { archivedAt: archived ? new Date() : null, version: { increment: 1 } } });
+    await touchTimeline(tx, ev.timelineId);
     await createRevision(tx, {
       universeId, recordType: "EVENT", recordId: eventId, version: updated.version, snapshot: eventSnapshot(updated),
       summary: archived ? "Archived" : "Restored from archive", authorId: userId, timelineId: ev.timelineId,
@@ -214,6 +218,7 @@ export async function addDependency(userId: string, universeId: string, raw: unk
       }
     }
     try {
+      await touchTimeline(tx, tid);
       const dep = await tx.eventDependency.create({
         data: { universeId, timelineId: tid, sourceId: input.sourceId, targetId: input.targetId, type: input.type, note: input.note ?? null },
       });

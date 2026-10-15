@@ -6,6 +6,7 @@ import { db, type DbOrTx } from "../db";
 import { conflict, invalid, notFound } from "../errors";
 import { assertEventsInUniverse, requireAccess } from "./access";
 import { recordActivity } from "./activity";
+import { touchTimeline } from "./changes";
 import { createRevision, relationshipSnapshot } from "./revisions";
 import { mainTimeline, resolveTimelineId } from "./snapshot";
 
@@ -68,6 +69,7 @@ export async function createRelationship(
       },
       include: { source: { select: { name: true } }, target: { select: { name: true } } },
     });
+    await touchTimeline(tx, timelineId);
     await createRevision(tx, {
       universeId, recordType: "RELATIONSHIP", recordId: rel.id, version: 1, snapshot: relationshipSnapshot(rel),
       summary: "Created", authorId: userId, timelineId,
@@ -99,6 +101,7 @@ export async function updateRelationship(userId: string, universeId: string, rel
     });
     if (!res.count) throw conflict("This relationship was changed by someone else. Reload and try again.");
     const updated = await tx.relationship.findUniqueOrThrow({ where: { id: relId } });
+    await touchTimeline(tx, updated.timelineId);
     await createRevision(tx, {
       universeId, recordType: "RELATIONSHIP", recordId: relId, version: updated.version, snapshot: relationshipSnapshot(updated),
       summary: "Edited", authorId: userId, timelineId: updated.timelineId,
@@ -116,6 +119,7 @@ export async function archiveRelationship(userId: string, universeId: string, re
     });
     if (!rel) throw notFound("Relationship");
     const updated = await tx.relationship.update({ where: { id: relId }, data: { archivedAt: new Date(), version: { increment: 1 } } });
+    await touchTimeline(tx, rel.timelineId);
     await createRevision(tx, {
       universeId, recordType: "RELATIONSHIP", recordId: relId, version: updated.version, snapshot: relationshipSnapshot(updated),
       summary: "Archived", authorId: userId, timelineId: rel.timelineId,

@@ -7,6 +7,7 @@ import { db, type DbOrTx } from "../db";
 import { conflict, invalid, notFound } from "../errors";
 import { requireAccess } from "./access";
 import { recordActivity } from "./activity";
+import { touchTimeline } from "./changes";
 import { createRevision, entitySnapshot, toJson } from "./revisions";
 import { mainTimeline, resolveTimelineId } from "./snapshot";
 
@@ -217,6 +218,7 @@ export async function updateEntity(userId: string, universeId: string, entityId:
     });
     if (!res.count) throw conflict("This record was changed by someone else. Reload to see the latest version before saving.");
     const updated = await tx.entity.findUniqueOrThrow({ where: { id: entityId } });
+    await touchTimeline(tx, updated.timelineId);
     await createRevision(tx, {
       universeId, recordType: "ENTITY", recordId: entityId, version: updated.version, snapshot: entitySnapshot(updated),
       summary: "Edited", authorId: userId, timelineId: updated.timelineId,
@@ -232,6 +234,7 @@ export async function setEntityArchived(userId: string, universeId: string, enti
     const e = await tx.entity.findFirst({ where: { id: entityId, universeId } });
     if (!e) throw notFound("Entity");
     const updated = await tx.entity.update({ where: { id: entityId }, data: { archivedAt: archived ? new Date() : null, version: { increment: 1 } } });
+    await touchTimeline(tx, e.timelineId);
     await createRevision(tx, {
       universeId, recordType: "ENTITY", recordId: entityId, version: updated.version, snapshot: entitySnapshot(updated),
       summary: archived ? "Archived" : "Restored from archive", authorId: userId, timelineId: e.timelineId,
@@ -292,6 +295,7 @@ export async function patchEntityFields(
     });
     if (!res.count) throw conflict("This record changed since the suggestion was generated. Reload and try again.");
     const updated = await tx.entity.findUniqueOrThrow({ where: { id: entityId } });
+    await touchTimeline(tx, updated.timelineId);
     await createRevision(tx, {
       universeId, recordType: "ENTITY", recordId: entityId, version: updated.version, snapshot: entitySnapshot(updated),
       summary, authorId: userId, timelineId: updated.timelineId,

@@ -490,6 +490,10 @@ model TimelineChange {
   /// true when the change was written into the base record (record owned by this timeline);
   /// false when it is an overlay on a record inherited from an ancestor timeline.
   appliedToBase Boolean          @default(false)
+  /// Record version produced by a base change; undo is only safe while the record is still at it.
+  resultVersion Int?
+  /// Set when this change was promoted from a branch into its parent.
+  promotedFromId String?
   sourceEventId String?
   reason        String           @default("")
   status        ChangeStatus     @default(ACCEPTED)

@@ -273,25 +273,29 @@ export const eventInputSchema = eventBaseSchema
   });
 export type EventInput = z.input<typeof eventInputSchema>;
 
-/** Patch of an event used by the Living World Engine. */
-export const eventPatchSchema = eventBaseSchema
-  .pick({
-    title: true,
-    description: true,
-    eventType: true,
-    startYear: true,
-    startMonth: true,
-    startDay: true,
-    endYear: true,
-    endMonth: true,
-    endDay: true,
-    precision: true,
-    locationId: true,
-    canonStatus: true,
-    importance: true,
+/**
+ * Patch of an event used by the Living World Engine. Declared without defaults on purpose:
+ * a patch must contain only the fields the creator actually changed.
+ */
+export const eventPatchSchema = z
+  .object({
+    title: shortText(200).min(1),
+    description: longText(20000),
+    eventType: shortText(40),
+    startYear: z.number().int().min(-1_000_000).max(1_000_000),
+    startMonth: month,
+    startDay: day,
+    endYear: optionalYear,
+    endMonth: month,
+    endDay: day,
+    precision: z.enum(DATE_PRECISIONS),
+    locationId: id.nullable(),
+    canonStatus: z.enum(CANON_STATUSES),
+    importance: z.number().int().min(1).max(5),
+    cancelled: z.boolean(),
   })
   .partial()
-  .extend({ cancelled: z.boolean().optional() })
+  .strict()
   .refine((p) => Object.keys(p).length > 0, "Propose at least one change.");
 export type EventPatch = z.infer<typeof eventPatchSchema>;
 
