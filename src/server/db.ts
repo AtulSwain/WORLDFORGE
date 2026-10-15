@@ -10,8 +10,22 @@ function createClient() {
   return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 }
 
-export const db: PrismaClient = globalForPrisma.prisma ?? createClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+function getClient(): PrismaClient {
+  if (!globalForPrisma.prisma) globalForPrisma.prisma = createClient();
+  return globalForPrisma.prisma;
+}
+
+/**
+ * Created on first use rather than at import, so builds (which import route modules)
+ * work without a database configured. One client per process, reused across hot reloads.
+ */
+export const db: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = getClient();
+    const value = Reflect.get(client, prop, client);
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+});
 
 export type Tx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 export type DbOrTx = PrismaClient | Tx;

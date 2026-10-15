@@ -329,4 +329,4 @@ These were verified by tests and by browser checks against both the dev server a
 - **Real-time collaboration** (presence, live cursors) is not implemented. Concurrent edits are protected by optimistic locking instead.
 - **The atlas** uses an image-based coordinate system. A MapLibre or tiled-map mode is not included. The 3D globe is experimental.
 - **Exports** do not include uploaded file contents, revision history or proposals.
-- **The Docker image** builds from the provided Dockerfile. The compose stack's migrate-then-serve sequence is documented, but it is not part of the automated test suite.
+- **Docker.** The `runner` image was built and smoke-tested: it serves pages and signs users in against PostgreSQL. The full `docker compose up` sequence (migrate, seed, then serve) has not been run end to end, and is not part of CI.
