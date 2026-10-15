@@ -22,7 +22,10 @@ export default async function CodexPage(props: PageProps<"/worlds/[worldId]/code
   const canWrite = ctx.can("content:write");
   const href = (patch: Record<string, string | null>) => {
     const n = new URLSearchParams(Object.entries(sp).filter((e): e is [string, string] => typeof e[1] === "string"));
-    for (const [k, v] of Object.entries(patch)) (v ? n.set(k, v) : n.delete(k));
+    for (const [k, v] of Object.entries(patch)) {
+      if (v) n.set(k, v);
+      else n.delete(k);
+    }
     return `?${n}`;
   };
   return (

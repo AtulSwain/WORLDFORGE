@@ -14,14 +14,29 @@ function rng(seed: number) {
   };
 }
 
-function ridge(seed: number, baseY: number, amp: number, steps = 48, w = 1600): string {
+/**
+ * A mountain silhouette: a few layered harmonics plus gentle noise, drawn through the
+ * points as a Catmull-Rom spline so the ridgeline rolls instead of zig-zagging.
+ */
+function ridge(seed: number, baseY: number, amp: number, steps = 24, w = 1600): string {
   const r = rng(seed);
-  let d = `M0 900 L0 ${baseY}`;
-  let y = baseY;
-  for (let i = 1; i <= steps; i++) {
-    const x = (i / steps) * w;
-    y = baseY + Math.sin(i * 0.55 + seed) * amp * 0.5 + (r() - 0.5) * amp;
-    d += ` L${x.toFixed(1)} ${y.toFixed(1)}`;
+  const pts: [number, number][] = [];
+  for (let i = -1; i <= steps + 1; i++) {
+    const t = i / steps;
+    const y =
+      baseY +
+      Math.sin(t * Math.PI * 2.1 + seed) * amp * 0.45 +
+      Math.sin(t * Math.PI * 5.3 + seed * 1.7) * amp * 0.22 +
+      Math.abs(Math.sin(t * Math.PI * 11.7 + seed * 0.6)) * amp * -0.18 +
+      (r() - 0.5) * amp * 0.45;
+    pts.push([t * w, y]);
+  }
+  let d = `M0 900 L${pts[1]![0].toFixed(1)} ${pts[1]![1].toFixed(1)}`;
+  for (let i = 1; i < pts.length - 2; i++) {
+    const [p0, p1, p2, p3] = [pts[i - 1]!, pts[i]!, pts[i + 1]!, pts[i + 2]!];
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d += ` C${c1[0]!.toFixed(1)} ${c1[1]!.toFixed(1)} ${c2[0]!.toFixed(1)} ${c2[1]!.toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
   }
   return `${d} L${w} 900 Z`;
 }
@@ -80,6 +95,8 @@ export function HeroLandscape({ className }: { className?: string }) {
         <path d={ridge(3, 470, 120)} fill="url(#far)" opacity="0.9" />
         <path d={ridge(11, 540, 90)} fill="url(#mid)" />
 
+        {/* the crag the citadel stands on */}
+        <path d="M930 700 C 960 610, 978 560, 992 534 L1128 534 C 1146 556, 1172 610, 1210 700 Z" fill="#15151c" />
         {/* citadel on the ridge */}
         <g transform="translate(980 395)" fill="#121219">
           <path d="M0 140 L0 70 L14 70 L14 40 L22 40 L22 10 L30 0 L38 10 L38 40 L46 40 L46 70 L70 70 L70 52 L78 52 L78 30 L86 22 L94 30 L94 52 L102 52 L102 90 L130 90 L130 64 L138 64 L138 48 L144 42 L150 48 L150 64 L158 64 L158 140 Z" />

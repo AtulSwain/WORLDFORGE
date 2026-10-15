@@ -89,8 +89,9 @@ export function Chronos(p: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // Initial framing: the focused event, or the whole history.
+  // Initial framing: the focused event, or the whole history. Needs the measured width.
   const framed = useRef(false);
+  /* eslint-disable react-hooks/set-state-in-effect -- one-time sync with a DOM measurement */
   useEffect(() => {
     if (framed.current || width < 100) return;
     framed.current = true;
@@ -112,6 +113,12 @@ export function Chronos(p: Props) {
     setPxPerYear(ppy);
     setViewStart(min - (80 / ppy) * YEAR_SCALE);
   }, [width, p.events, p.focusId, p.calendar.currentYear]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const pxPerOrdRef = useRef(pxPerOrd);
+  useEffect(() => {
+    pxPerOrdRef.current = pxPerOrd;
+  }, [pxPerOrd]);
 
   const zoomAt = useCallback(
     (factor: number, anchorX: number) => {
@@ -139,8 +146,6 @@ export function Chronos(p: Props) {
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, [zoomAt]);
-  const pxPerOrdRef = useRef(pxPerOrd);
-  pxPerOrdRef.current = pxPerOrd;
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -464,24 +469,18 @@ export function Chronos(p: Props) {
         </AnimatePresence>
       </div>
 
-      <BranchDialog worldId={p.worldId} parent={p.timeline} event={branchFor} onClose={() => setBranchFor(null)} />
+      <BranchDialog key={branchFor?.id ?? "closed"} worldId={p.worldId} parent={p.timeline} event={branchFor} onClose={() => setBranchFor(null)} />
     </div>
   );
 }
 
 function BranchDialog({ worldId, parent, event, onClose }: { worldId: string; parent: { id: string; name: string }; event: ChronoEvent | null; onClose: () => void }) {
   const router = useRouter();
-  const [name, setName] = useState("");
+  // The parent remounts this dialog (via `key`) for each event, so state starts fresh.
+  const [name, setName] = useState(event ? `What if… ${event.title}` : "");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  useEffect(() => {
-    if (event) {
-      setName(`What if… ${event.title}`);
-      setDescription("");
-      setError(null);
-    }
-  }, [event]);
   return (
     <Dialog open={!!event} onOpenChange={(o) => !o && onClose()}>
       {event ? (

@@ -15,6 +15,12 @@ import { RecordReportButton } from "@/components/overview/record-report-button";
 import { AiOutlinePanel } from "@/components/ai/ai-outline-panel";
 import { publicAiStatus } from "@/server/ai/config";
 import { timeAgo } from "@/lib/utils";
+import { universeMetadata } from "@/server/page-metadata";
+
+export async function generateMetadata(props: PageProps<"/worlds/[worldId]">) {
+  const { worldId } = await props.params;
+  return universeMetadata(worldId);
+}
 
 export default async function WorldOverviewPage(props: PageProps<"/worlds/[worldId]">) {
   const { worldId } = await props.params;

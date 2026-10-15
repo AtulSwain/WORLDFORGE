@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useFrame, useLoader } from "@react-three/fiber";
-import { Suspense, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
 interface GlobeMarker {
@@ -20,14 +20,22 @@ function toSphere(x: number, y: number, w: number, h: number, r: number): [numbe
 
 function Globe({ image, width, height, markers, onHover, rotation }: { image: string; width: number; height: number; markers: GlobeMarker[]; onHover: (m: GlobeMarker | null) => void; rotation: React.RefObject<{ x: number; y: number; dragging: boolean }> }) {
   const texture = useLoader(THREE.TextureLoader, image);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- three.js textures are configured by mutation
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+  }, [texture]);
   const group = useRef<THREE.Group>(null);
+  // The render loop advances shared, mutable rotation state by design (no React re-render per frame).
+  /* eslint-disable react-hooks/immutability */
   useFrame((_, dt) => {
-    if (!group.current || !rotation.current) return;
-    if (!rotation.current.dragging) rotation.current.y += dt * 0.06;
-    group.current.rotation.y = rotation.current.y;
-    group.current.rotation.x = rotation.current.x;
+    const rot = rotation.current;
+    if (!group.current || !rot) return;
+    if (!rot.dragging) rot.y += dt * 0.06;
+    group.current.rotation.y = rot.y;
+    group.current.rotation.x = rot.x;
   });
+  /* eslint-enable react-hooks/immutability */
   const points = useMemo(() => markers.map((m) => ({ m, p: toSphere(m.x, m.y, width, height, 1.01) })), [markers, width, height]);
   return (
     <group ref={group}>

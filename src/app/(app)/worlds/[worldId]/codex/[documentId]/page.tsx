@@ -12,6 +12,12 @@ import { ArchiveButton } from "@/components/common/archive-button";
 import { LoreEditor } from "@/components/codex/lore-editor";
 import { Markdown } from "@/components/codex/markdown";
 import { EntityIcon } from "@/components/world/entity-visual";
+import { loreMetadata } from "@/server/page-metadata";
+
+export async function generateMetadata(props: PageProps<"/worlds/[worldId]/codex/[documentId]">) {
+  const { worldId, documentId } = await props.params;
+  return loreMetadata(worldId, documentId);
+}
 
 export default async function LoreDocumentPage(props: PageProps<"/worlds/[worldId]/codex/[documentId]">) {
   const { worldId, documentId } = await props.params;

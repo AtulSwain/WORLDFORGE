@@ -33,16 +33,23 @@ type Status = { kind: "saved"; at: Date | null } | { kind: "dirty" } | { kind: "
 export function LoreEditor({ worldId, doc, entities, events }: { worldId: string; doc: Doc; entities: PickOption[]; events: PickOption[] }) {
   const router = useRouter();
   const [state, setState] = useState(doc);
+  const docVersion = doc.version;
   const [status, setStatus] = useState<Status>({ kind: "saved", at: null });
   const statusRef = useRef(status);
-  statusRef.current = status;
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
   const [mode, setMode] = useState<"write" | "split" | "preview">("split");
   const version = useRef(doc.version);
   const latest = useRef(state);
   const savedJson = useRef(JSON.stringify(doc));
   const inFlight = useRef(false);
   const queued = useRef(false);
-  latest.current = state;
+  useEffect(() => {
+    latest.current = state;
+  }, [state]);
+  // Lets `save` re-run itself for edits made while a save was in flight.
+  const saveRef = useRef<() => Promise<void>>(async () => undefined);
 
   const save = useCallback(async () => {
     if (inFlight.current) {
@@ -61,15 +68,18 @@ export function LoreEditor({ worldId, doc, entities, events }: { worldId: string
     inFlight.current = false;
     if (r.ok) {
       version.current = r.data.version;
-      savedJson.current = JSON.stringify({ ...s, version: doc.version });
+      savedJson.current = JSON.stringify({ ...s, version: docVersion });
       if (queued.current || latest.current !== s) {
         queued.current = false;
         setStatus({ kind: "dirty" });
-        void save();
+        void saveRef.current();
       } else setStatus({ kind: "saved", at: new Date(r.data.savedAt) });
     } else if (r.code === "CONFLICT") setStatus({ kind: "conflict", message: r.error });
     else setStatus({ kind: "error", message: r.error });
-  }, [worldId, doc.id]);
+  }, [worldId, doc.id, docVersion]);
+  useEffect(() => {
+    saveRef.current = save;
+  }, [save]);
 
   useEffect(() => {
     // Only content that differs from the last server-confirmed save counts as a change.

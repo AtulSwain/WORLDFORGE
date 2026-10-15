@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/menu";
 
 export interface DetailTab {
@@ -10,13 +10,17 @@ export interface DetailTab {
   content: React.ReactNode;
 }
 
+function subscribeHash(onChange: () => void) {
+  window.addEventListener("hashchange", onChange);
+  return () => window.removeEventListener("hashchange", onChange);
+}
+const readHash = () => window.location.hash.slice(1);
+
 /** Tabbed record layout; the active tab is reflected in the URL hash so links and reloads keep it. */
 export function DetailTabs({ tabs }: { tabs: DetailTab[] }) {
-  const [active, setActive] = useState(tabs[0]!.id);
-  useEffect(() => {
-    const h = window.location.hash.slice(1);
-    if (tabs.some((t) => t.id === h)) setActive(h);
-  }, [tabs]);
+  const hash = useSyncExternalStore(subscribeHash, readHash, () => "");
+  const [chosen, setActive] = useState<string | null>(null);
+  const active = chosen ?? (tabs.some((t) => t.id === hash) ? hash : tabs[0]!.id);
   return (
     <Tabs
       value={active}

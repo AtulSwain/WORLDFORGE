@@ -12,6 +12,12 @@ import { DetailTabs } from "@/components/common/detail-tabs";
 import { RevisionHistory } from "@/components/common/revision-history";
 import { ArchiveButton } from "@/components/common/archive-button";
 import { DependencyManager } from "@/components/events/dependency-manager";
+import { eventMetadata } from "@/server/page-metadata";
+
+export async function generateMetadata(props: PageProps<"/worlds/[worldId]/events/[eventId]">) {
+  const { worldId, eventId } = await props.params;
+  return eventMetadata(worldId, eventId);
+}
 
 export default async function EventPage(props: PageProps<"/worlds/[worldId]/events/[eventId]">) {
   const { worldId, eventId } = await props.params;

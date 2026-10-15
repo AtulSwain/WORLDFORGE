@@ -1,4 +1,7 @@
 import { EntityNewPage } from "@/components/entities/entity-edit-pages";
+import { newEntityMetadata } from "@/server/page-metadata";
+
+export const metadata = newEntityMetadata("FACTION");
 
 export default async function Page(props: PageProps<"/worlds/[worldId]/factions/new">) {
   const { worldId } = await props.params;

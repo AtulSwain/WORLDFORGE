@@ -24,7 +24,8 @@ function checkKey(key: string) {
 
 class LocalDriver implements StorageDriver {
   name = "local" as const;
-  private root = path.resolve(process.env.STORAGE_LOCAL_DIR ?? "./storage");
+  // Runtime-configured directory; excluded from build-time file tracing.
+  private root = path.resolve(/*turbopackIgnore: true*/ process.env.STORAGE_LOCAL_DIR ?? "./storage");
   private file(key: string) {
     checkKey(key);
     const p = path.resolve(this.root, key);

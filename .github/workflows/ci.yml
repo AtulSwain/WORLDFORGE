@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: worldforge
+          POSTGRES_PASSWORD: worldforge
+          POSTGRES_DB: worldforge
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U worldforge" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://worldforge:worldforge@localhost:5432/worldforge
+      DATABASE_URL_TEST: postgresql://worldforge:worldforge@localhost:5432/worldforge_test
+      APP_URL: http://localhost:3000
+      AI_PROVIDER: none
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Prepare databases
+        run: |
+          PGPASSWORD=worldforge psql -h localhost -U worldforge -d worldforge -c "CREATE DATABASE worldforge_test"
+          npm run db:deploy
+          npm run db:test:prepare
+          npm run db:seed
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:all
+      - run: npm run build
+      - name: End-to-end tests (production build)
+        run: |
+          npx playwright install --with-deps chromium
+          npx next start -p 3100 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3100/ && break; sleep 1; done
+          E2E_BASE_URL=http://localhost:3100 npm run test:e2e

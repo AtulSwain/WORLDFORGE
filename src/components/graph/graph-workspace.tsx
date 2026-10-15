@@ -85,12 +85,16 @@ function GraphInner({ worldId, timelines, canWrite, customTypes }: { worldId: st
   const flow = useReactFlow();
   const [tl, setTl] = useState<string>(params.get("tl") ?? timelines.find((t) => t.isMain)?.id ?? timelines[0]!.id);
   const [focus, setFocus] = useState<string[]>(params.get("focus")?.split(",").filter(Boolean) ?? []);
-  const [settings, setSettings] = useState<Settings>(() => ({
-    types: params.get("types")?.split(",").filter(Boolean) ?? [],
-    rels: params.get("rels")?.split(",").filter(Boolean) ?? [],
-    events: false,
-    depth: 2,
-  }));
+  // Client-only component (loaded with ssr: false), so stored settings can be read on first render.
+  const [settings, setSettings] = useState<Settings>(() => {
+    const fromUrl: Settings = {
+      types: params.get("types")?.split(",").filter(Boolean) ?? [],
+      rels: params.get("rels")?.split(",").filter(Boolean) ?? [],
+      events: false,
+      depth: 2,
+    };
+    return params.get("types") || params.get("rels") ? fromUrl : readStored(STORAGE(worldId), fromUrl);
+  });
   const [data, setData] = useState<GraphData | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
@@ -106,11 +110,7 @@ function GraphInner({ worldId, timelines, canWrite, customTypes }: { worldId: st
   const positions = useRef(new Map<string, { x: number; y: number }>());
   const reqId = useRef(0);
 
-  // Restore persisted settings and positions (per viewer, per world and timeline).
-  useEffect(() => {
-    if (!params.get("types") && !params.get("rels")) setSettings((s) => readStored(STORAGE(worldId), s));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once on mount
-  }, []);
+  // Persist settings and positions (per viewer, per world and timeline).
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE(worldId), JSON.stringify(settings));
@@ -147,11 +147,14 @@ function GraphInner({ worldId, timelines, canWrite, customTypes }: { worldId: st
     }
   }, [worldId, tl, focus, settings]);
 
+  // Fetching and pushing layouts into React Flow's node state are syncs with external systems
+  // (the API and React Flow, which owns node state once users drag).
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     void load();
   }, [load]);
 
-  // Layout: keep known positions, place new nodes with a force simulation.
+  // Layout: keep known positions, place new nodes with a force simulation, then fit the viewport.
   useEffect(() => {
     if (!data) return;
     const visible = data.nodes.filter((n) => !hidden.has(n.id));
@@ -174,6 +177,7 @@ function GraphInner({ worldId, timelines, canWrite, customTypes }: { worldId: st
     for (const [id, p] of layout) if (!positions.current.has(id)) positions.current.set(id, p);
     requestAnimationFrame(() => flow.fitView({ padding: 0.2, duration: 400, maxZoom: 1.2 }));
   }, [data, hidden, flow]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const savePositions = () => {
     try {

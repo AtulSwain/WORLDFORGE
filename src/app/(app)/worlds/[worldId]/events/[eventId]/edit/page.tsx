@@ -6,6 +6,12 @@ import { PageHeader } from "@/components/ui/misc";
 import { EventForm } from "@/components/events/event-form";
 import { eventFormData } from "@/components/events/event-form-data";
 import type { DatePrecision } from "@/domain/chronology";
+import { eventMetadata } from "@/server/page-metadata";
+
+export async function generateMetadata(props: PageProps<"/worlds/[worldId]/events/[eventId]/edit">) {
+  const { worldId, eventId } = await props.params;
+  return eventMetadata(worldId, eventId, "Edit");
+}
 
 export default async function EditEventPage(props: PageProps<"/worlds/[worldId]/events/[eventId]/edit">) {
   const { worldId, eventId } = await props.params;

@@ -24,9 +24,13 @@ export function CommandPalette({ worldId, canWrite, universes }: { worldId: stri
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<Hit[]>([]);
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  // Results are keyed by the query they answer, so a stale response never shows for a newer query.
+  const [result, setResult] = useState<{ q: string; hits: Hit[]; failed: boolean }>({ q: "", hits: [], failed: false });
   const reqId = useRef(0);
+  const trimmed = query.trim();
+  const settled = result.q === trimmed;
+  const hits = trimmed && settled ? result.hits : [];
+  const status: "idle" | "loading" | "error" = !trimmed ? "idle" : !settled ? "loading" : result.failed ? "error" : "idle";
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -42,13 +46,8 @@ export function CommandPalette({ worldId, canWrite, universes }: { worldId: stri
   // Debounced server search.
   useEffect(() => {
     const q = query.trim();
-    if (!q) {
-      setHits([]);
-      setStatus("idle");
-      return;
-    }
+    if (!q) return;
     const id = ++reqId.current;
-    setStatus("loading");
     const t = setTimeout(async () => {
       try {
         const params = new URLSearchParams({ q });
@@ -56,12 +55,9 @@ export function CommandPalette({ worldId, canWrite, universes }: { worldId: stri
         const res = await fetch(`/api/search?${params}`);
         if (!res.ok) throw new Error();
         const data = (await res.json()) as { hits: Hit[] };
-        if (id === reqId.current) {
-          setHits(data.hits);
-          setStatus("idle");
-        }
+        if (id === reqId.current) setResult({ q, hits: data.hits, failed: false });
       } catch {
-        if (id === reqId.current) setStatus("error");
+        if (id === reqId.current) setResult({ q, hits: [], failed: true });
       }
     }, 200);
     return () => clearTimeout(t);

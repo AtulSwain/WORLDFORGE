@@ -12,7 +12,7 @@ import { addAiPossibilitiesAction, analyzeProposalAction, commitProposalAction, 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Field, FormError } from "@/components/ui/field";
+import { Field } from "@/components/ui/field";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 

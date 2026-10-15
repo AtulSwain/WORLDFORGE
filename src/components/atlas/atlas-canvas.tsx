@@ -80,7 +80,12 @@ export function AtlasCanvas({
   const pan = useRef<{ x: number; y: number; tx: number; ty: number; moved: boolean } | null>(null);
   const dragMarker = useRef<{ id: string; dx: number; dy: number; moved: boolean } | null>(null);
 
-  useEffect(() => setMarkers(initialMarkers), [initialMarkers]);
+  // Server data replaced (e.g. after router.refresh()): adopt it.
+  const [markerSource, setMarkerSource] = useState(initialMarkers);
+  if (markerSource !== initialMarkers) {
+    setMarkerSource(initialMarkers);
+    setMarkers(initialMarkers);
+  }
 
   // Center on a viewport (image coordinates) once the container size is known.
   const centerOn = useCallback((x: number, y: number, z: number) => {
@@ -96,6 +101,8 @@ export function AtlasCanvas({
   }, []);
 
   const framed = useRef(false);
+  // Framing depends on the measured container size, which only exists after layout.
+  /* eslint-disable react-hooks/set-state-in-effect -- one-time sync with a DOM measurement */
   useEffect(() => {
     if (framed.current || size.w < 50) return;
     framed.current = true;
@@ -106,6 +113,7 @@ export function AtlasCanvas({
       centerOn(map.viewport.x, map.viewport.y, map.viewport.zoom || fit);
     }
   }, [size, centerOn, initialMarkers, focusId, map]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const zoomAt = useCallback((factor: number, cx: number, cy: number) => {
     setView((v) => {

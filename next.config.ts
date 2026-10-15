@@ -14,6 +14,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // The Docker image runs the self-contained server; regular builds keep `next start`.
+  ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
   serverExternalPackages: ["@prisma/adapter-pg", "pg", "sharp"],
   experimental: {
     serverActions: { bodySizeLimit: "2mb" },

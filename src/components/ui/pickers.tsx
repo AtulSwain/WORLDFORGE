@@ -1,7 +1,7 @@
 "use client";
 
 import { Command } from "cmdk";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Check, ChevronsUpDown, X } from "lucide-react";
 import type { EntityTypeKey } from "@/domain/catalog";
 import { EntityIcon } from "@/components/world/entity-visual";
@@ -35,12 +35,13 @@ export function RecordPicker({
   invalid?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const listId = useId();
   const selected = options.find((o) => o.id === value);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <div className="relative">
         <PopoverTrigger asChild>
-          <button id={id} type="button" role="combobox" aria-expanded={open} aria-invalid={invalid} className={cn(fieldBase, "flex h-9 items-center gap-2 pr-14 text-left")}>
+          <button id={id} type="button" role="combobox" aria-expanded={open} aria-controls={listId} aria-invalid={invalid} className={cn(fieldBase, "flex h-9 items-center gap-2 pr-14 text-left")}>
             {selected ? (
               <>
                 {selected.type ? <EntityIcon type={selected.type as EntityTypeKey} className="size-3.5" /> : null}
@@ -61,7 +62,7 @@ export function RecordPicker({
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-64 p-0" align="start">
         <Command label="Search records">
           <Command.Input placeholder="Search…" className="h-10 w-full border-b border-border bg-transparent px-3 text-sm focus:outline-none" />
-          <Command.List className="max-h-64 overflow-y-auto p-1">
+          <Command.List id={listId} className="max-h-64 overflow-y-auto p-1">
             <Command.Empty className="px-3 py-2 text-xs text-muted">No matches.</Command.Empty>
             {options.map((o) => (
               <Command.Item
