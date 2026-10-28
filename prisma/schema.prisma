@@ -1,0 +1,834 @@
+// WorldForge canonical data model.
+// Conventions:
+// - Every world record carries `universeId` so authorization can be checked with a single lookup.
+// - Canon-bearing records (entities, events, relationships, dependencies) carry `timelineId`:
+//   the timeline in which the record originates. Descendant timelines inherit it unless a
+//   TimelineChange override (status ACCEPTED) in that branch modifies or removes it.
+// - `version` columns implement optimistic concurrency.
+// - Nothing canonical is hard-deleted by normal workflows: records are archived and every
+//   mutation leaves a Revision snapshot.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── Users & auth ─────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  bio          String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions        Session[]
+  resetTokens     PasswordResetToken[]
+  memberships     UniverseMember[]
+  ownedUniverses  Universe[]           @relation("UniverseOwner")
+  preferences     UserPreference?
+  activities      UniverseActivity[]
+  auditLogs       AuditLog[]
+  aiSuggestions   AiSuggestion[]
+  revisions       Revision[]
+  invitationsSent Invitation[]         @relation("InvitedBy")
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+  userAgent  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model UserPreference {
+  userId          String   @id
+  reducedMotion   Boolean  @default(false)
+  directoryView   String   @default("grid")
+  onboardingDraft Json?
+  lastUniverseId  String?
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ───────────────────────────── Universe ─────────────────────────────
+
+enum Genre {
+  HIGH_FANTASY
+  DARK_FANTASY
+  SCIENCE_FICTION
+  POST_APOCALYPTIC
+  HISTORICAL_FICTION
+  MYTHOLOGY
+  SUPERHERO
+  HORROR
+  CONTEMPORARY
+  CUSTOM
+}
+
+enum MemberRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum CanonStatus {
+  CANON
+  DRAFT
+  DISPUTED
+  NON_CANON
+}
+
+model Universe {
+  id                String    @id @default(cuid())
+  ownerId           String
+  name              String
+  slug              String    @unique
+  description       String    @default("")
+  genre             Genre     @default(HIGH_FANTASY)
+  customGenre       String?
+  tone              String?
+  mainConflict      String?
+  timePeriod        String?
+  coreRules         String?
+  coverImage        String?
+  currentEra        String?
+  defaultTimelineId String?
+  /// Calendar display configuration, validated by `calendarSchema`.
+  calendar          Json
+  /// Consistency rule configuration, validated by `universeSettingsSchema`.
+  settings          Json
+  isSample          Boolean   @default(false)
+  archivedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  owner         User                  @relation("UniverseOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members       UniverseMember[]
+  invitations   Invitation[]
+  timelines     Timeline[]
+  entities      Entity[]
+  relationships Relationship[]
+  events        HistoricalEvent[]
+  dependencies  EventDependency[]
+  loreDocuments LoreDocument[]
+  maps          WorldMap[]
+  assets        MediaAsset[]
+  revisions     Revision[]
+  changes       TimelineChange[]
+  proposals     ChangeProposal[]
+  aiSuggestions AiSuggestion[]
+  consistency   ConsistencyReport[]
+  activities    UniverseActivity[]
+  auditLogs     AuditLog[]
+  relationTypes RelationshipTypeDef[]
+
+  @@index([ownerId])
+}
+
+model UniverseMember {
+  id         String     @id @default(cuid())
+  universeId String
+  userId     String
+  role       MemberRole
+  createdAt  DateTime   @default(now())
+
+  universe Universe @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([universeId, userId])
+  @@index([userId])
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
+model Invitation {
+  id          String           @id @default(cuid())
+  universeId  String
+  email       String
+  role        MemberRole
+  tokenHash   String           @unique
+  status      InvitationStatus @default(PENDING)
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime         @default(now())
+
+  universe  Universe @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  invitedBy User     @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([universeId, status])
+}
+
+// ───────────────────────────── Timelines ─────────────────────────────
+
+enum TimelineStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model Timeline {
+  id            String         @id @default(cuid())
+  universeId    String
+  name          String
+  description   String         @default("")
+  isMain        Boolean        @default(false)
+  parentId      String?
+  branchEventId String?
+  status        TimelineStatus @default(ACTIVE)
+  /// Incremented on every committed change; used for optimistic concurrency.
+  version       Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  universe    Universe          @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  parent      Timeline?         @relation("TimelineTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children    Timeline[]        @relation("TimelineTree")
+  branchEvent HistoricalEvent?  @relation("BranchPoint", fields: [branchEventId], references: [id], onDelete: SetNull)
+  entities    Entity[]
+  events      HistoricalEvent[]
+  relations   Relationship[]
+  deps        EventDependency[]
+  changes     TimelineChange[]
+  proposals   ChangeProposal[]
+
+  @@index([universeId])
+  @@index([parentId])
+}
+
+// ───────────────────────────── Entities ─────────────────────────────
+
+enum EntityType {
+  CHARACTER
+  FACTION
+  LOCATION
+  ARTIFACT
+  SPECIES
+  CREATURE
+  CULTURE
+  RELIGION
+  LANGUAGE
+  TECHNOLOGY
+  MAGIC_SYSTEM
+  CUSTOM
+}
+
+model Entity {
+  id              String      @id @default(cuid())
+  universeId      String
+  timelineId      String
+  type            EntityType
+  customTypeLabel String?
+  name            String
+  slug            String
+  summary         String      @default("")
+  description     String      @default("")
+  /// e.g. ALIVE / DECEASED / ACTIVE / DISSOLVED / DESTROYED / UNKNOWN
+  status          String      @default("UNKNOWN")
+  /// Birth / founding / creation year (internal calendar year).
+  beginYear       Int?
+  /// Death / dissolution / destruction year.
+  endYear         Int?
+  portrait        String?
+  /// Type-specific structured attributes, validated by per-type Zod schemas.
+  attributes      Json
+  canonStatus     CanonStatus @default(CANON)
+  version         Int         @default(1)
+  createdById     String?
+  archivedAt      DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  universe      Universe           @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  timeline      Timeline           @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+  outgoing      Relationship[]     @relation("RelSource")
+  incoming      Relationship[]     @relation("RelTarget")
+  participation EventParticipant[]
+  eventsHere    HistoricalEvent[]  @relation("EventLocation")
+  loreLinks     LoreLink[]
+  placements    MapPlacement[]
+  regions       MapRegion[]
+  assetLinks    AssetLink[]
+
+  @@unique([universeId, slug])
+  @@index([universeId, type, archivedAt])
+  @@index([universeId, name])
+  @@index([timelineId])
+}
+
+model RelationshipTypeDef {
+  id         String   @id @default(cuid())
+  universeId String
+  key        String
+  label      String
+  inverse    String?
+  createdAt  DateTime @default(now())
+
+  universe Universe @relation(fields: [universeId], references: [id], onDelete: Cascade)
+
+  @@unique([universeId, key])
+}
+
+model Relationship {
+  id            String      @id @default(cuid())
+  universeId    String
+  timelineId    String
+  sourceId      String
+  targetId      String
+  /// Built-in key (ALLY_OF, RULES, …) or a universe-defined RelationshipTypeDef key.
+  type          String
+  description   String      @default("")
+  validFromYear Int?
+  validToYear   Int?
+  /// Event that established this relationship (e.g. a treaty creating an alliance).
+  originEventId String?
+  /// Event that ended this relationship.
+  endEventId    String?
+  canonStatus   CanonStatus @default(CANON)
+  version       Int         @default(1)
+  createdById   String?
+  archivedAt    DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  universe    Universe         @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  timeline    Timeline         @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+  source      Entity           @relation("RelSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target      Entity           @relation("RelTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  originEvent HistoricalEvent? @relation("RelOrigin", fields: [originEventId], references: [id], onDelete: SetNull)
+  endEvent    HistoricalEvent? @relation("RelEnd", fields: [endEventId], references: [id], onDelete: SetNull)
+
+  @@index([universeId, archivedAt])
+  @@index([sourceId])
+  @@index([targetId])
+  @@index([originEventId])
+  @@index([endEventId])
+  @@index([timelineId])
+}
+
+// ───────────────────────────── Events ─────────────────────────────
+
+enum DatePrecision {
+  DAY
+  MONTH
+  YEAR
+  CIRCA
+  DECADE
+  CENTURY
+  ERA
+}
+
+model HistoricalEvent {
+  id           String        @id @default(cuid())
+  universeId   String
+  timelineId   String
+  title        String
+  slug         String
+  description  String        @default("")
+  eventType    String        @default("OTHER")
+  startYear    Int
+  startMonth   Int?
+  startDay     Int?
+  endYear      Int?
+  endMonth     Int?
+  endDay       Int?
+  precision    DatePrecision @default(YEAR)
+  /// Monotonic ordinal derived from the start date; used for chronological sort.
+  startOrdinal Int
+  endOrdinal   Int?
+  displayDate  String?
+  importance   Int           @default(3)
+  locationId   String?
+  canonStatus  CanonStatus   @default(CANON)
+  version      Int           @default(1)
+  createdById  String?
+  archivedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  universe     Universe           @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  timeline     Timeline           @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+  location     Entity?            @relation("EventLocation", fields: [locationId], references: [id], onDelete: SetNull)
+  participants EventParticipant[]
+  dependsOn    EventDependency[]  @relation("DepTarget")
+  enables      EventDependency[]  @relation("DepSource")
+  loreLinks    LoreLink[]
+  branchPoints Timeline[]         @relation("BranchPoint")
+  originOf     Relationship[]     @relation("RelOrigin")
+  endOf        Relationship[]     @relation("RelEnd")
+  proposals    ChangeProposal[]
+  assetLinks   AssetLink[]
+
+  @@unique([universeId, slug])
+  @@index([universeId, startOrdinal])
+  @@index([timelineId])
+  @@index([locationId])
+}
+
+enum ParticipantRole {
+  PROTAGONIST
+  ANTAGONIST
+  VICTIM
+  INSTIGATOR
+  WITNESS
+  COMMANDER
+  ALLY
+  OBSERVER
+  SIGNATORY
+  PARTICIPANT
+}
+
+model EventParticipant {
+  id        String          @id @default(cuid())
+  eventId   String
+  entityId  String
+  role      ParticipantRole @default(PARTICIPANT)
+  note      String?
+  createdAt DateTime        @default(now())
+
+  event  HistoricalEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  entity Entity          @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, entityId, role])
+  @@index([entityId])
+}
+
+enum DependencyType {
+  CAUSES
+  ENABLES
+  PREVENTS
+  PRECEDES
+  CONTRIBUTES_TO
+}
+
+/// Directed causal link: `source` CAUSES / ENABLES / PRECEDES … `target`.
+model EventDependency {
+  id         String         @id @default(cuid())
+  universeId String
+  timelineId String
+  sourceId   String
+  targetId   String
+  type       DependencyType
+  note       String?
+  createdAt  DateTime       @default(now())
+
+  universe Universe        @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  timeline Timeline        @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+  source   HistoricalEvent @relation("DepSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target   HistoricalEvent @relation("DepTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, targetId, type])
+  @@index([universeId])
+  @@index([targetId])
+}
+
+// ───────────────────────────── Change tracking ─────────────────────────────
+
+enum ChangeTargetType {
+  ENTITY
+  EVENT
+  RELATIONSHIP
+}
+
+enum ChangeType {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum ChangeStatus {
+  PROPOSED
+  ACCEPTED
+  REJECTED
+  REVERTED
+}
+
+/// Auditable record of a change committed to a timeline.
+/// In a branch, ACCEPTED changes to inherited records act as overrides; the
+/// parent's record is never modified.
+model TimelineChange {
+  id            String           @id @default(cuid())
+  universeId    String
+  timelineId    String
+  proposalId    String?
+  targetType    ChangeTargetType
+  targetId      String
+  changeType    ChangeType
+  previousState Json?
+  proposedState Json?
+  /// true when the change was written into the base record (record owned by this timeline);
+  /// false when it is an overlay on a record inherited from an ancestor timeline.
+  appliedToBase Boolean          @default(false)
+  /// Record version produced by a base change; undo is only safe while the record is still at it.
+  resultVersion Int?
+  /// Set when this change was promoted from a branch into its parent.
+  promotedFromId String?
+  sourceEventId String?
+  reason        String           @default("")
+  status        ChangeStatus     @default(ACCEPTED)
+  authorId      String?
+  createdAt     DateTime         @default(now())
+  revertedAt    DateTime?
+
+  universe Universe        @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  timeline Timeline        @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+  proposal ChangeProposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+
+  @@index([timelineId, status])
+  @@index([targetType, targetId])
+}
+
+/// Immutable snapshot of a record after each mutation.
+model Revision {
+  id         String   @id @default(cuid())
+  universeId String
+  /// ENTITY | EVENT | RELATIONSHIP | LORE
+  recordType String
+  recordId   String
+  version    Int
+  snapshot   Json
+  summary    String   @default("")
+  authorId   String?
+  timelineId String?
+  createdAt  DateTime @default(now())
+
+  universe Universe @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  author   User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([recordType, recordId, version])
+  @@index([universeId, createdAt])
+}
+
+enum ProposalStatus {
+  DRAFT
+  ANALYZED
+  COMMITTED
+  DISCARDED
+}
+
+/// A Living World Engine simulation: a proposed modification of one event and
+/// the impact report produced for it.
+model ChangeProposal {
+  id                  String         @id @default(cuid())
+  universeId          String
+  timelineId          String
+  sourceEventId       String
+  title               String
+  rationale           String         @default("")
+  /// Zod-validated patch of the source event (title/dates/status/…).
+  patch               Json
+  status              ProposalStatus @default(DRAFT)
+  /// Timeline version observed when the analysis ran (optimistic concurrency).
+  analyzedVersion     Int?
+  /// Version of the source event at analysis time.
+  sourceVersion       Int?
+  report              Json?
+  committedTimelineId String?
+  createdById         String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  universe    Universe         @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  timeline    Timeline         @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+  sourceEvent HistoricalEvent  @relation(fields: [sourceEventId], references: [id], onDelete: Cascade)
+  items       ImpactItem[]
+  changes     TimelineChange[]
+
+  @@index([universeId, createdAt])
+}
+
+enum ImpactBasis {
+  PRIMARY_CHANGE
+  EXPLICIT_DEPENDENCY
+  DETERMINISTIC_RULE
+  EXISTING_RELATIONSHIP
+  AI_INFERENCE
+  UNVERIFIED
+}
+
+enum ReviewStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model ImpactItem {
+  id              String       @id @default(cuid())
+  proposalId      String
+  category        String
+  title           String
+  description     String
+  basis           ImpactBasis
+  /// Qualitative strength: DIRECT | LIKELY | POSSIBLE | QUESTION
+  strength        String
+  /// [{ type, id, label }]
+  affected        Json
+  /// [{ type, id, label, note }]
+  evidence        Json
+  /// Optional concrete change: { targetType, targetId, changeType, patch }
+  suggestedChange Json?
+  status          ReviewStatus @default(PENDING)
+  sortOrder       Int          @default(0)
+  createdAt       DateTime     @default(now())
+  decidedAt       DateTime?
+
+  proposal ChangeProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId])
+}
+
+// ───────────────────────────── Lore ─────────────────────────────
+
+model LoreDocument {
+  id          String      @id @default(cuid())
+  universeId  String
+  title       String
+  slug        String
+  body        String      @default("")
+  category    String      @default("HISTORY")
+  tags        String[]
+  canonStatus CanonStatus @default(CANON)
+  version     Int         @default(1)
+  authorId    String?
+  archivedAt  DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  universe   Universe    @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  links      LoreLink[]
+  assetLinks AssetLink[]
+
+  @@unique([universeId, slug])
+  @@index([universeId, category])
+}
+
+model LoreLink {
+  id         String  @id @default(cuid())
+  documentId String
+  entityId   String?
+  eventId    String?
+
+  document LoreDocument     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  entity   Entity?          @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  event    HistoricalEvent? @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, entityId, eventId])
+  @@index([entityId])
+  @@index([eventId])
+}
+
+// ───────────────────────────── Atlas ─────────────────────────────
+
+model WorldMap {
+  id               String   @id @default(cuid())
+  universeId       String
+  title            String
+  /// IMAGE (image-backed fictional coordinates)
+  mapType          String   @default("IMAGE")
+  coordinateSystem String   @default("IMAGE_PIXELS")
+  /// Public path or asset URL of the backing image.
+  imageSource      String
+  width            Int
+  height           Int
+  layerConfig      Json
+  defaultViewport  Json
+  isDefault        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  universe   Universe       @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  placements MapPlacement[]
+  routes     MapRoute[]
+  regions    MapRegion[]
+
+  @@index([universeId])
+}
+
+model MapPlacement {
+  id       String @id @default(cuid())
+  mapId    String
+  entityId String
+  x        Float
+  y        Float
+
+  map    WorldMap @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  entity Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([mapId, entityId])
+}
+
+model MapRoute {
+  id     String @id @default(cuid())
+  mapId  String
+  name   String
+  kind   String @default("ROAD")
+  /// [[x, y], …]
+  points Json
+
+  map WorldMap @relation(fields: [mapId], references: [id], onDelete: Cascade)
+}
+
+model MapRegion {
+  id        String  @id @default(cuid())
+  mapId     String
+  name      String
+  factionId String?
+  color     String  @default("#D6BD8D")
+  /// [[x, y], …]
+  polygon   Json
+
+  map     WorldMap @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  faction Entity?  @relation(fields: [factionId], references: [id], onDelete: SetNull)
+}
+
+// ───────────────────────────── Media ─────────────────────────────
+
+model MediaAsset {
+  id           String    @id @default(cuid())
+  universeId   String
+  uploaderId   String?
+  kind         String    @default("REFERENCE")
+  filename     String
+  mimeType     String
+  sizeBytes    Int
+  storageKey   String    @unique
+  thumbnailKey String?
+  width        Int?
+  height       Int?
+  altText      String    @default("")
+  archivedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  universe Universe    @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  links    AssetLink[]
+
+  @@index([universeId, kind])
+}
+
+model AssetLink {
+  id         String  @id @default(cuid())
+  assetId    String
+  entityId   String?
+  eventId    String?
+  documentId String?
+
+  asset    MediaAsset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  entity   Entity?          @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  event    HistoricalEvent? @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  document LoreDocument?    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([entityId])
+}
+
+// ───────────────────────────── AI, consistency, activity ─────────────────────────────
+
+enum SuggestionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  FAILED
+}
+
+model AiSuggestion {
+  id           String           @id @default(cuid())
+  universeId   String
+  userId       String
+  kind         String
+  targetType   String?
+  targetId     String?
+  input        Json
+  output       Json?
+  error        String?
+  status       SuggestionStatus @default(PENDING)
+  provider     String
+  model        String
+  isDemo       Boolean          @default(false)
+  inputTokens  Int              @default(0)
+  outputTokens Int              @default(0)
+  createdAt    DateTime         @default(now())
+  decidedAt    DateTime?
+
+  universe Universe @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([universeId, kind])
+}
+
+model ConsistencyReport {
+  id         String   @id @default(cuid())
+  universeId String
+  timelineId String
+  findings   Json
+  errorCount Int      @default(0)
+  warnCount  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  universe Universe @relation(fields: [universeId], references: [id], onDelete: Cascade)
+
+  @@index([universeId, createdAt])
+}
+
+model UniverseActivity {
+  id         String   @id @default(cuid())
+  universeId String
+  actorId    String?
+  action     String
+  targetType String?
+  targetId   String?
+  summary    String
+  createdAt  DateTime @default(now())
+
+  universe Universe @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  actor    User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([universeId, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  universeId String?
+  action     String
+  metadata   Json
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  universe Universe? @relation(fields: [universeId], references: [id], onDelete: SetNull)
+
+  @@index([universeId, createdAt])
+  @@index([userId, createdAt])
+}
